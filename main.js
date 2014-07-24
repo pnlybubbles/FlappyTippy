@@ -19,7 +19,7 @@ var config = {
   // プレイヤーに作用する重力加速度(y方向)
   "player_y_gravity" : 850,
   // プレイヤーがジャンプした時に作用する力積(速度)(y方向)
-  "player_y_jump_velocity" : -280,
+  "player_y_jump_velocity" : -290,
   // プレイヤーの回転(下を向く時)の基準となる速度上限値(この値を超過すると下を向く)
   "player_rotation_limit_velocity" : 500,
   // プレイヤーの衝突判定用の矩形サイズ
@@ -47,17 +47,17 @@ if(location.hash.match("#fps")) config.game_fps = parseInt(location.hash.replace
 window.onload = function() {
   var game = new Game(config.game_width, config.game_height);
   game.fps = config.game_fps;
-  game.preload("player-1.png", "player-2.png", "background.png", "ground.png", "pipe-middle.png", "pipe-down.png", "pipe-up.png", "splash.png");
+  game.preload("player-1.png", "player-2.png", "background.png", "ground.png", "pipe-middle.png", "pipe-down.png", "pipe-up.png", "splash.png", "ceiling.png", "scoreboard.png", "replay.png");
   console.log(game);
   game.onload = function() {
-    game.pushScene(createStage(game));
+    gameFlow(game);
   };
   game.start();
 };
 
 var debug = null;
 
-function createStage (game) {
+function gameFlow (game) {
   var background_image_width = 552;
   var background_image_height = 497;
   var ground_image_width = 552;
@@ -67,11 +67,34 @@ function createStage (game) {
   var player = new PlayerSprite(game);
   var pipe_object = new FlowPipe(game, config.ground_scroll_speed, config.pipe_margin, player.collision_ray);
   var ground = new FlowEndless(game, config.ground_scroll_speed, "ground.png", ground_image_width, ground_image_height, game.height - ground_image_height);
-  player.onfall = function() {
-    this.imgs_animation = false;
+  var ceiling = new FlowEndless(game, config.ground_scroll_speed, "ceiling.png", 640, 16, 0, player.collision_ray);
+  if(DEBUG) debug = new DebugWindow(game);
+  var game_flow = true;
+  var game_stop = function() {
+    if(game_flow) {
+      // console.log("intersect");
+      player.y_velocity = 0;
+      player.imgs_animation = false;
+      stop_scrolling();
+      game_flow = false;
+      var result = new ResultWindow(game);
+      stage.addChild(result);
+      result.show();
+      result.onreplay = function() {
+        // console.log("replay");
+        game.popScene();
+        gameFlow(game);
+      };
+    }
+  };
+  var stop_scrolling = function() {
     background.stop();
     ground.stop();
     pipe_object.stop();
+    ceiling.stop();
+  };
+  player.onfall = function() {
+    game_stop();
   };
   pipe_object.onappearedobject = function(s) {
     var pipe_margin_position = Math.random();
@@ -79,29 +102,25 @@ function createStage (game) {
     // console.log(x, pipe_margin_position);
     this.add_object(x, pipe_margin_position);
   };
-  var game_flow = true;
-  pipe_object.onintersectobject = function(s) {
-    if(game_flow) {
-      console.log("intersect");
-      player.y_velocity = 0;
-      player.imgs_animation = false;
-      background.stop();
-      ground.stop();
-      pipe_object.stop();
-      game_flow = false;
-    }
+  pipe_object.onintersectobject = function() {
+    game_stop();
+  };
+  ceiling.onintersectobject = function() {
+    game_stop();
   };
   stage.addChild(background);
   stage.addChild(player);
   stage.addChild(pipe_object);
   stage.addChild(ground);
+  stage.addChild(ceiling);
   start = new Group();
   start_splash = new Sprite(188, 170);
   start_splash.image = game.assets["splash.png"];
   start_splash.x = Math.round(game.width / 2 - start_splash.width / 2);
-  start_splash.y = Math.round((game.height - ground_image_height) / 2 - start_splash.height / 2);
+  start_splash.y = Math.round((game.height - config.ground_height) / 2 - start_splash.height / 2);
+  start_splash.opacity = 0;
   start.addChild(start_splash);
-  if(DEBUG) debug = new DebugWindow(game);
+  start_splash.tl.fadeIn(0.6 * game.fps, enchant.Easing.LINEAR);
   var stage_scene = new Scene();
   stage_scene.addChild(stage);
   stage_scene.addChild(start);
@@ -138,8 +157,42 @@ function createStage (game) {
       }
     }
   });
-  return stage_scene;
+  game.pushScene(stage_scene);
 }
+
+var ResultWindow = Class.create(Group, {
+  initialize: function(game) {
+    this.game = game;
+    Group.call(this);
+    this.scoreboard = new Sprite(236, 280);
+    this.scoreboard.image = this.game.assets["scoreboard.png"];
+    this.scoreboard.x = Math.round(game.width / 2 - this.scoreboard.width / 2);
+    this.scoreboard.y = Math.round((game.height - config.ground_height) / 2 - this.scoreboard.height / 2) + 40 + 30;
+    this.scoreboard.opacity = 0;
+    this.addChild(this.scoreboard);
+    this.replay_button = new Sprite(114, 70);
+    this.replay_button.image = this.game.assets["replay.png"];
+    this.replay_button.x = Math.round(game.width / 2 - this.replay_button.width / 2);
+    this.replay_button.y = this.scoreboard.y + 175 + 30;
+    this.replay_button.opacity = 0;
+    this.addChild(this.replay_button);
+  },
+  show: function() {
+    var animation_frame = 0.7 * this.game.fps;
+    var animation_easing = enchant.Easing.EXPO_EASEOUT;
+    this.scoreboard.tl.fadeIn(animation_frame, animation_easing);
+    this.scoreboard.tl.and();
+    this.scoreboard.tl.moveTo(this.scoreboard.x, Math.round((this.game.height - config.ground_height) / 2 - this.scoreboard.height / 2) + 40, animation_frame, animation_easing);
+    console.log(this.scoreboard);
+    this.replay_button.tl.delay(0.5 * this.game.fps).fadeIn(animation_frame, animation_easing);
+    this.replay_button.tl.and();
+    this.replay_button.tl.moveTo(this.replay_button.x, this.scoreboard.y + 175, animation_frame, animation_easing);
+    this.replay_button.addEventListener("touchstart", function() {
+      this.parentNode.onreplay();
+    });
+  },
+  onreplay: function() {}
+});
 
 var DebugWindow = Class.create(Group, {
   initialize: function(game) {
@@ -179,7 +232,6 @@ var PlayerSprite = Class.create(Group, {
     this.imgs_n = 0;
     this.imgs_animation = true;
     this.imgs_change_frame = Math.ceil(this.game.fps * (config.player_imgs_change_interval / 1000));
-    console.log(this.imgs_change_frame);
     this.img_ray = new Sprite(this.width, this.height);
     this.img_ray.image = this.game.assets[this.imgs[0]];
     this.collision_ray = new Sprite(config.player_collision_ray_width, config.player_collision_ray_height);
@@ -234,7 +286,6 @@ var Flow = Class.create(Group, {
     this.default_speed = speed;
     this.speed = this.default_speed;
     this.flow_sprites = [];
-    this.appeared = false;
   },
   onenterframe: function() {
     // this.x = -(this.speed) * (this.game.frame / this.game.fps);
@@ -244,7 +295,6 @@ var Flow = Class.create(Group, {
     // }
   },
   add: function(s) {
-    // console.log(s.x);
     s.onenterframe = function() {
       if(this.parentNode.x + this.x + this.width < 0) {
         // console.log(this.parentNode.x, this.x + this.width);
@@ -257,16 +307,34 @@ var Flow = Class.create(Group, {
         this.parentNode.onappearedobject(this);
       }
       if(this.appeared && this.parentNode && this.parentNode.collision_to) {
-        this.childNodes.forEach(function(si, i) {
+        var child_node = [this];
+        if(this.childNodes) {
+          child_node = this.childNodes;
+        }
+        child_node.forEach(function(si, i) {
           if(this.parentNode.collision_to.intersect(si)) {
+            // console.log("intersect");
             this.parentNode.onintersectobject(this);
           }
         }, this);
       }
     };
+    // console.log(s);
     this.flow_sprites.push(s);
     this.addChild(s);
   },
+  // intersect: function(a, b) {
+  //   c0 = a._offsetX + a.width > b._offsetX;
+  //   c1 = a._offsetY < b._offsetY + b.height;
+  //   c2 = a._offsetX < b._offsetX + b.width;
+  //   c3 = a._offsetY + a.height > b._offsetY;
+  //   // console.log(a._offsetX + a.width, b._offsetX, a._offsetX, b._offsetX + b.width);
+  //   // console.log(a._offsetY, b._offsetY + b.height, a._offsetY + a.height, b._offsetY);
+  //   // console.log(c0 && c2, c1 && c3);
+  //   // console.log(c0 && c1 && c2 && c3, c0, c1, c2, c3);
+  //   // puts([c0 && c1 && c2 && c3, c0, c1, c2, c3]);
+  //   return c0 && c1 && c2 && c3;
+  // },
   stop: function() {
     this.speed = 0;
   },
@@ -275,17 +343,18 @@ var Flow = Class.create(Group, {
   },
   ondisappearedobject: function() {},
   onappearedobject: function() {},
-  onintersectobject: function() {}
+  onintersectobject: function() { console.log("intersect(function not defined)"); }
 });
 
 var FlowEndless = Class.create(Flow, {
-  initialize: function(game, speed, assets, width, height, y) {
+  initialize: function(game, speed, assets, width, height, y, collision_to) {
     this.game = game;
     Flow.call(this, this.game, speed);
     this.assets = assets;
     this.s_y = y;
     this.s_width = width;
     this.s_height = height;
+    this.collision_to = collision_to;
     for(var i = 0; i <= 1; i++) {
       var s = this.create_sprite();
       s.x = i * s.width;
@@ -295,7 +364,7 @@ var FlowEndless = Class.create(Flow, {
   create_sprite: function() {
     var s = new Sprite(this.s_width, this.s_height);
     s.y = this.s_y;
-    s.image = this.game.assets[this.assets];
+    if(this.assets) s.image = this.game.assets[this.assets];
     return s;
   },
   ondisappearedobject: function(rs) {
@@ -325,7 +394,7 @@ var FlowPipe = Class.create(Flow, {
     this.add(s);
   },
   create_sprite: function(pipe_margin_position) {
-    console.log("create pipe");
+    // console.log("create pipe");
     var available_pipe_area = this.y_ground;
     var pipe_extra_length = 5;
     var not_available_pipe_length = this.pipe_down_height + this.pipe_up_height + pipe_extra_length * 2 + this.pipe_margin;
@@ -358,3 +427,12 @@ var FlowPipe = Class.create(Flow, {
     return s;
   }
 });
+
+var puts_log = [];
+
+function puts (obj) {
+  if(puts_log.indexOf(obj) == -1) {
+    puts_log.push(obj);
+    console.log(obj);
+  }
+}
