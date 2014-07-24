@@ -1,11 +1,53 @@
 enchant();
 
+// var DEBUG = true;
 var DEBUG = false;
+if(location.hash == "#debug") DEBUG = true;
+
+var config = {
+  // ゲーム画面のサイズ
+  "game_width" : 500,
+  "game_height" : 450,
+  // ゲームのfps上限
+  "game_fps" : 100,
+  //プレイヤーの画像を変更するインターバル(ms)
+  "player_imgs_change_interval" : 230,
+  // プレイヤーの位置(x座標)
+  "player_x" : 70,
+  // プレイヤーの初期位置(y座標)
+  "player_y" : 120,
+  // プレイヤーに作用する重力加速度(y方向)
+  "player_y_gravity" : 850,
+  // プレイヤーがジャンプした時に作用する力積(速度)(y方向)
+  "player_y_jump_velocity" : -280,
+  // プレイヤーの回転(下を向く時)の基準となる速度上限値(この値を超過すると下を向く)
+  "player_rotation_limit_velocity" : 500,
+  // プレイヤーの衝突判定用の矩形サイズ
+  "player_collision_ray_width" : 30,
+  "player_collision_ray_height" : 26,
+  // プレイヤーの衝突判定用の矩形とプレイヤー画像の相対位置
+  "player_collision_ray_x" : 3,
+  "player_collision_ray_y" : 5,
+  // 地面の高さ(画面下方からの距離)(落下判定用)
+  "ground_height" : 100,
+  // 背景の流れる速さ
+  "background_scroll_speed" : 12,
+  // 地面、パイプの流れる速さ
+  "ground_scroll_speed" : 120,
+  // パイプ同士の距離(左右)
+  "pipe_interval" : 185,
+  // パイプ同士の距離(上下)
+  "pipe_margin" : 90,
+  // 最初のパイプの位置(ゲーム画面幅 + 指定したx座標)
+  "first_pipe_x" : 300
+};
+
+if(location.hash.match("#fps")) config.game_fps = parseInt(location.hash.replace(/#fps/, ""), 10);
 
 window.onload = function() {
-  var game = new Game(400, 500);
-  game.fps = 60;
-  game.preload("player.png", "background.png", "ground.png", "pipe-middle.png", "pipe-down.png", "pipe-up.png");
+  var game = new Game(config.game_width, config.game_height);
+  game.fps = config.game_fps;
+  game.preload("player-1.png", "player-2.png", "background.png", "ground.png", "pipe-middle.png", "pipe-down.png", "pipe-up.png", "splash.png");
   console.log(game);
   game.onload = function() {
     game.pushScene(createStage(game));
@@ -13,21 +55,27 @@ window.onload = function() {
   game.start();
 };
 
+var debug = null;
+
 function createStage (game) {
+  var background_image_width = 552;
+  var background_image_height = 497;
+  var ground_image_width = 552;
+  var ground_image_height = 102;
   var stage = new Group();
-  var background = new FlowEndless(game, 8, "background.png", 552, 497, -99); // (game, speed, assets, width, height, y)
+  var background = new FlowEndless(game, config.background_scroll_speed, "background.png", background_image_width, background_image_height, -(background_image_height - game.height + ground_image_height));
   var player = new PlayerSprite(game);
-  var pipe_object = new FlowPipe(game, 80, 100, player.collision_ray);
-  var ground = new FlowEndless(game, 80, "ground.png", 552, 102, 398);
+  var pipe_object = new FlowPipe(game, config.ground_scroll_speed, config.pipe_margin, player.collision_ray);
+  var ground = new FlowEndless(game, config.ground_scroll_speed, "ground.png", ground_image_width, ground_image_height, game.height - ground_image_height);
   player.onfall = function() {
+    this.imgs_animation = false;
     background.stop();
     ground.stop();
     pipe_object.stop();
   };
-  pipe_object.add_object(game.width + 300, 0.3);
   pipe_object.onappearedobject = function(s) {
     var pipe_margin_position = Math.random();
-    var x = s.x + 200;
+    var x = s.x + config.pipe_interval;
     // console.log(x, pipe_margin_position);
     this.add_object(x, pipe_margin_position);
   };
@@ -36,6 +84,7 @@ function createStage (game) {
     if(game_flow) {
       console.log("intersect");
       player.y_velocity = 0;
+      player.imgs_animation = false;
       background.stop();
       ground.stop();
       pipe_object.stop();
@@ -46,15 +95,70 @@ function createStage (game) {
   stage.addChild(player);
   stage.addChild(pipe_object);
   stage.addChild(ground);
+  start = new Group();
+  start_splash = new Sprite(188, 170);
+  start_splash.image = game.assets["splash.png"];
+  start_splash.x = Math.round(game.width / 2 - start_splash.width / 2);
+  start_splash.y = Math.round((game.height - ground_image_height) / 2 - start_splash.height / 2);
+  start.addChild(start_splash);
+  if(DEBUG) debug = new DebugWindow(game);
   var stage_scene = new Scene();
   stage_scene.addChild(stage);
+  stage_scene.addChild(start);
+  if(DEBUG) stage_scene.addChild(debug);
+  var game_started = false;
+  player.y_gravity = 0;
   stage_scene.addEventListener("touchstart", function() {
+    if(!game_started) {
+      start_splash.tl.fadeOut(0.2 * game.fps, enchant.Easing.LINEAR).then(function() {
+        stage_scene.removeChild(start);
+      });
+      player.y_gravity = config.player_y_gravity;
+      pipe_object.add_object(-(pipe_object.x) + game.width + config.first_pipe_x, 0.3);
+      game_started = true;
+    }
     if(!player.fallen && game_flow) {
       player.jump();
     }
   });
+  if(DEBUG) {
+    debug.add("fps");
+    var fps_log = [];
+  }
+  stage_scene.addEventListener("enterframe", function() {
+    if(DEBUG) {
+      fps_log.push(game.actualFps);
+      if(game.frame % game.fps === 0) {
+        var fps_sum = 0;
+        for(var i = 0; i <= fps_log.length - 1; i++) {
+          fps_sum += fps_log[i];
+        }
+        debug.line.fps.text = "fps: " + (fps_sum / fps_log.length);
+        fps_log = [];
+      }
+    }
+  });
   return stage_scene;
 }
+
+var DebugWindow = Class.create(Group, {
+  initialize: function(game) {
+    this.game = game;
+    Group.call(this);
+    this.width = this.game.width;
+    this.height = this.game.height;
+    this.line = {};
+    this.line_height = 3;
+  },
+  add: function(name) {
+    this.line[name] = new Label();
+    this.line[name].font = "10px";
+    this.line[name].y = this.line_height;
+    this.line[name].x = 3;
+    this.line_height += 13;
+    this.addChild(this.line[name]);
+  }
+});
 
 var PlayerSprite = Class.create(Group, {
   initialize: function(game) {
@@ -62,52 +166,58 @@ var PlayerSprite = Class.create(Group, {
     Group.call(this);
     this.width = 35;
     this.height = 35;
-    this.default_x = Math.round(this.game.width / 2 - this.width / 2) - 8;
-    this.default_y = 50;
+    this.default_x = config.player_x;
+    this.default_y = config.player_y;
     this.x = this.default_x;
     this.y = this.default_y;
-    this.y_jump_velocity = -190;
+    this.y_jump_velocity = config.player_y_jump_velocity;
     this.y_velocity = 0;
-    this.y_gravity = 320;
-    this.rotation_limit_velocity = 300;
-    this.y_ground = this.game.height - 102;
+    this.y_gravity = config.player_y_gravity;
+    this.rotation_limit_velocity = config.player_rotation_limit_velocity;
+    this.y_ground = this.game.height - config.ground_height;
+    this.imgs = ["player-1.png", "player-2.png"];
+    this.imgs_n = 0;
+    this.imgs_animation = true;
+    this.imgs_change_frame = Math.ceil(this.game.fps * (config.player_imgs_change_interval / 1000));
+    console.log(this.imgs_change_frame);
     this.img_ray = new Sprite(this.width, this.height);
-    this.img_ray.image = this.game.assets["player.png"];
-    this.collision_ray = new Sprite(this.width - 4, this.height - 8);
-    this.collision_ray.y = 4;
-    this.collision_ray.x = 2;
+    this.img_ray.image = this.game.assets[this.imgs[0]];
+    this.collision_ray = new Sprite(config.player_collision_ray_width, config.player_collision_ray_height);
+    this.collision_ray.x = config.player_collision_ray_x;
+    this.collision_ray.y = config.player_collision_ray_y;
     if(DEBUG) this.collision_ray.backgroundColor = "#f00";
     this.addChild(this.collision_ray);
     this.addChild(this.img_ray);
     this.onfall = function() {};
     this.fallen = false;
-    console.log(this);
+    // console.log(this);
   },
   onenterframe: function() {
     this.y_velocity += this.y_gravity * (1 / this.game.fps);
     this.y += this.y_velocity * (1 / this.game.fps);
     var rotation_value = 0;
-    if(this.y_velocity <= 0) {
-      if(this.y_gravity === 0) {
-        rotation_value = 135;
-      } else {
-        rotation_value = 0;
-      }
+    if(this.y_gravity === 0) {
+      rotation_value = this.img_ray.rotation + 45;
     } else if(this.y_velocity > this.rotation_limit_velocity) {
       rotation_value = 135;
-    } else if(this.y_velocity > 0) {
-      rotation_value = 135 * (this.y_velocity / this.rotation_limit_velocity);
+    } else {
+      rotation_value = 135 * ((this.y_velocity + (-this.y_jump_velocity)) / (this.rotation_limit_velocity + (-this.y_jump_velocity)));
     }
     this.img_ray.rotation = rotation_value - 45;
     if(this.y > this.y_ground - this.height) {
       this.y_velocity = 0;
       this.y_gravity = 0;
-      this.img_ray.rotation = 90;
+      // this.img_ray.rotation = 90;
       this.y = this.y_ground - this.height;
       this.fallen = true;
       this.onfall();
     }
     this.moveTo(this.x, this.y);
+    if(this.imgs_animation && this.game.frame % this.imgs_change_frame === 0) {
+      this.imgs_n += 1;
+      if(this.imgs_n > this.imgs.length - 1) { this.imgs_n = 0; }
+      this.img_ray.image = this.game.assets[this.imgs[this.imgs_n]];
+    }
   },
   jump: function() {
     this.y_velocity = this.y_jump_velocity;
@@ -127,7 +237,11 @@ var Flow = Class.create(Group, {
     this.appeared = false;
   },
   onenterframe: function() {
+    // this.x = -(this.speed) * (this.game.frame / this.game.fps);
     this.x -= this.speed * (1 / this.game.fps);
+    // if(this.game.frame % this.game.fps === 0) {
+    //   console.log(this.x);
+    // }
   },
   add: function(s) {
     // console.log(s.x);
@@ -202,7 +316,7 @@ var FlowPipe = Class.create(Flow, {
     this.pipe_up_width = 52;
     this.pipe_middle_height = 1;
     this.pipe_middle_width = 52;
-    this.y_ground = this.game.height - 102;
+    this.y_ground = this.game.height - config.ground_height;
     this.collision_to = collision_to;
   },
   add_object: function(x, pipe_margin_position) { // pipe_margin_position : parcentage from top (0.0 , 1.0)
@@ -211,6 +325,7 @@ var FlowPipe = Class.create(Flow, {
     this.add(s);
   },
   create_sprite: function(pipe_margin_position) {
+    console.log("create pipe");
     var available_pipe_area = this.y_ground;
     var pipe_extra_length = 5;
     var not_available_pipe_length = this.pipe_down_height + this.pipe_up_height + pipe_extra_length * 2 + this.pipe_margin;
@@ -218,12 +333,12 @@ var FlowPipe = Class.create(Flow, {
     var top_pipe_length = Math.round(not_available_pipe_length / 2) + Math.round(available_pipe_length * pipe_margin_position) - Math.round(this.pipe_margin / 2);
     var bottom_pipe_length = Math.round(not_available_pipe_length / 2) + Math.round(available_pipe_length * (1 - pipe_margin_position)) - Math.round(this.pipe_margin / 2);
     var top_pipe_middle_sprite = new Sprite(this.pipe_middle_width, top_pipe_length - this.pipe_down_height);
-    top_pipe_middle_sprite.image = this.game.assets["pipe-middle.png"];
     var bottom_pipe_middle_sprite = new Sprite(this.pipe_middle_width, bottom_pipe_length - this.pipe_up_height);
-    bottom_pipe_middle_sprite.image = this.game.assets["pipe-middle.png"];
     var top_pipe_down_sprite = new Sprite(this.pipe_down_width, this.pipe_down_height);
-    top_pipe_down_sprite.image = this.game.assets["pipe-down.png"];
     var bottom_pipe_up_sprite = new Sprite(this.pipe_up_width, this.pipe_up_height);
+    top_pipe_middle_sprite.image = this.game.assets["pipe-middle.png"];
+    bottom_pipe_middle_sprite.image = this.game.assets["pipe-middle.png"];
+    top_pipe_down_sprite.image = this.game.assets["pipe-down.png"];
     bottom_pipe_up_sprite.image = this.game.assets["pipe-up.png"];
     top_pipe_middle_sprite.x = 0;
     top_pipe_middle_sprite.y = 0;
