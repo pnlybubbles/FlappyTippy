@@ -37,7 +37,7 @@ var config = {
   // パイプ同士の距離(左右)
   "pipe_interval" : 185,
   // パイプ同士の距離(上下)
-  "pipe_margin" : 90,
+  "pipe_margin" : 140, //90
   // 最初のパイプの位置(ゲーム画面幅 + 指定したx座標)
   "first_pipe_x" : 300
 };
@@ -47,7 +47,7 @@ if(location.hash.match("#fps")) config.game_fps = parseInt(location.hash.replace
 window.onload = function() {
   var game = new Game(config.game_width, config.game_height);
   game.fps = config.game_fps;
-  game.preload("player-1.png", "player-2.png", "background.png", "ground.png", "pipe-middle.png", "pipe-down.png", "pipe-up.png", "splash.png", "ceiling.png", "scoreboard.png", "replay.png");
+  game.preload("player-1.png", "player-2.png", "background.png", "ground.png", "pipe-middle.png", "pipe-down.png", "pipe-up.png", "splash.png", "ceiling.png", "scoreboard.png", "replay.png", "font_big_0.png", "font_big_1.png", "font_big_2.png", "font_big_3.png", "font_big_4.png", "font_big_5.png", "font_big_6.png", "font_big_7.png", "font_big_8.png", "font_big_9.png");
   console.log(game);
   game.onload = function() {
     gameFlow(game);
@@ -62,29 +62,109 @@ function gameFlow (game) {
   var background_image_height = 497;
   var ground_image_width = 552;
   var ground_image_height = 102;
+  // main scene
+  var stage_scene = new Scene();
+  // debug
+  debug = new DebugWindow(game);
+  debug.add("entity", "entity all: <#all> pipe: <#pipe>");
+  debug.line.entity.values.all = 0;
+  debug.line.entity.values.pipe = 0;
+  debug.add("point", "point: <#point>");
+  debug.line.point.values.point = 0;
+  stage_scene.addEventListener("touchstart", function() {
+    game_start();
+  });
+  debug.add("fps", "fps: <#fps>");
+  var fps_log = [];
+  stage_scene.addEventListener("enterframe", function() {
+    fps_log.push(game.actualFps);
+    if(game.frame % game.fps === 0) {
+      var fps_sum = 0;
+      for(var i = 0; i <= fps_log.length - 1; i++) {
+        fps_sum += fps_log[i];
+      }
+      debug.line.fps.values.fps = fps_sum / fps_log.length;
+      fps_log = [];
+    }
+  });
+  // stage
   var stage = new Group();
   var background = new FlowEndless(game, config.background_scroll_speed, "background.png", background_image_width, background_image_height, -(background_image_height - game.height + ground_image_height));
   var player = new PlayerSprite(game);
-  var pipe_object = new FlowPipe(game, config.ground_scroll_speed, config.pipe_margin, player.collision_ray);
+  player.y_gravity = 0;
+  var pipe_object = new FlowPipe(game, config.ground_scroll_speed, config.pipe_margin, player);
   var ground = new FlowEndless(game, config.ground_scroll_speed, "ground.png", ground_image_width, ground_image_height, game.height - ground_image_height);
   var ceiling = new FlowEndless(game, config.ground_scroll_speed, "ceiling.png", 640, 16, 0, player.collision_ray);
-  if(DEBUG) debug = new DebugWindow(game);
-  var game_flow = true;
+  var point_number = new NumberDisplay(game, ["font_big_0.png", "font_big_1.png", "font_big_2.png", "font_big_3.png", "font_big_4.png", "font_big_5.png", "font_big_6.png", "font_big_7.png", "font_big_8.png", "font_big_9.png"], 24, 36, 5);
+  point_number.x_center = Math.round(game.width / 2);
+  point_number.y = 40;
+  point_number.opacity = 0;
+  console.log(point_number);
+  // start
+  var start = new Group();
+  start_splash = new Sprite(188, 170);
+  start_splash.image = game.assets["splash.png"];
+  start_splash.x = Math.round(game.width / 2 - start_splash.width / 2);
+  start_splash.y = Math.round((game.height - config.ground_height) / 2 - start_splash.height / 2) + 10;
+  start_splash.opacity = 0;
+  start_splash.tl.fadeIn(0.6 * game.fps, enchant.Easing.LINEAR);
+  // result
+  var result = new ResultWindow(game);
+  result.scoreboard.x = Math.round(game.width / 2 - result.scoreboard.width / 2);
+  result.scoreboard.y = Math.round((game.height - config.ground_height) / 2 - result.scoreboard.height / 2) + 45;
+  result.replay_button.x = Math.round(game.width / 2 - result.replay_button.width / 2);
+  result.replay_button.y = result.scoreboard.y + 200;
+  // add to group
+  // stage
+  stage.addChild(background);
+  stage.addChild(player);
+  stage.addChild(pipe_object);
+  stage.addChild(ground);
+  stage.addChild(ceiling);
+  stage.addChild(point_number);
+  //start
+  start.addChild(start_splash);
+  // add to scene
+  stage_scene.addChild(stage);
+  stage_scene.addChild(start);
+  stage_scene.addChild(result);
+  if(DEBUG) stage_scene.addChild(debug);
+  // add to game
+  game.pushScene(stage_scene);
+  // action functions
+  var game_finished = false;
   var game_stop = function() {
-    if(game_flow) {
-      // console.log("intersect");
+    if(!game_finished) {
+      game_finished = true;
       player.y_velocity = 0;
       player.imgs_animation = false;
       stop_scrolling();
-      game_flow = false;
-      var result = new ResultWindow(game);
-      stage.addChild(result);
+      point_number.tl.fadeOut(0.1 * game.fps, enchant.Easing.LINEAR).then(function() {
+        stage.removeChild(this);
+      });
       result.show();
       result.onreplay = function() {
         // console.log("replay");
-        game.popScene();
-        gameFlow(game);
+        result.hide().then(function() {
+          game.popScene();
+          gameFlow(game);
+        });
       };
+    }
+  };
+  var game_started = false;
+  var game_start = function() {
+    if(!game_started) {
+      start_splash.tl.fadeOut(0.2 * game.fps, enchant.Easing.LINEAR).then(function() {
+        stage_scene.removeChild(start);
+      });
+      point_number.tl.fadeIn(0.1 * game.fps, enchant.Easing.LINEAR);
+      player.y_gravity = config.player_y_gravity;
+      pipe_object.add_object(-(pipe_object.x) + game.width + config.first_pipe_x, 0.3);
+      game_started = true;
+    }
+    if(!game_finished) {
+      player.jump();
     }
   };
   var stop_scrolling = function() {
@@ -93,6 +173,7 @@ function gameFlow (game) {
     pipe_object.stop();
     ceiling.stop();
   };
+  // events
   player.onfall = function() {
     game_stop();
   };
@@ -102,62 +183,19 @@ function gameFlow (game) {
     // console.log(x, pipe_margin_position);
     this.add_object(x, pipe_margin_position);
   };
+  var point = 0;
+  pipe_object.ongetpoint = function() {
+    console.log("get point");
+    point += 1;
+    point_number.value = point;
+    debug.line.point.values.point = point;
+  };
   pipe_object.onintersectobject = function() {
     game_stop();
   };
   ceiling.onintersectobject = function() {
     game_stop();
   };
-  stage.addChild(background);
-  stage.addChild(player);
-  stage.addChild(pipe_object);
-  stage.addChild(ground);
-  stage.addChild(ceiling);
-  start = new Group();
-  start_splash = new Sprite(188, 170);
-  start_splash.image = game.assets["splash.png"];
-  start_splash.x = Math.round(game.width / 2 - start_splash.width / 2);
-  start_splash.y = Math.round((game.height - config.ground_height) / 2 - start_splash.height / 2);
-  start_splash.opacity = 0;
-  start.addChild(start_splash);
-  start_splash.tl.fadeIn(0.6 * game.fps, enchant.Easing.LINEAR);
-  var stage_scene = new Scene();
-  stage_scene.addChild(stage);
-  stage_scene.addChild(start);
-  if(DEBUG) stage_scene.addChild(debug);
-  var game_started = false;
-  player.y_gravity = 0;
-  stage_scene.addEventListener("touchstart", function() {
-    if(!game_started) {
-      start_splash.tl.fadeOut(0.2 * game.fps, enchant.Easing.LINEAR).then(function() {
-        stage_scene.removeChild(start);
-      });
-      player.y_gravity = config.player_y_gravity;
-      pipe_object.add_object(-(pipe_object.x) + game.width + config.first_pipe_x, 0.3);
-      game_started = true;
-    }
-    if(!player.fallen && game_flow) {
-      player.jump();
-    }
-  });
-  if(DEBUG) {
-    debug.add("fps");
-    var fps_log = [];
-  }
-  stage_scene.addEventListener("enterframe", function() {
-    if(DEBUG) {
-      fps_log.push(game.actualFps);
-      if(game.frame % game.fps === 0) {
-        var fps_sum = 0;
-        for(var i = 0; i <= fps_log.length - 1; i++) {
-          fps_sum += fps_log[i];
-        }
-        debug.line.fps.text = "fps: " + (fps_sum / fps_log.length);
-        fps_log = [];
-      }
-    }
-  });
-  game.pushScene(stage_scene);
 }
 
 var ResultWindow = Class.create(Group, {
@@ -166,32 +204,110 @@ var ResultWindow = Class.create(Group, {
     Group.call(this);
     this.scoreboard = new Sprite(236, 280);
     this.scoreboard.image = this.game.assets["scoreboard.png"];
-    this.scoreboard.x = Math.round(game.width / 2 - this.scoreboard.width / 2);
-    this.scoreboard.y = Math.round((game.height - config.ground_height) / 2 - this.scoreboard.height / 2) + 40 + 30;
     this.scoreboard.opacity = 0;
     this.addChild(this.scoreboard);
     this.replay_button = new Sprite(114, 70);
     this.replay_button.image = this.game.assets["replay.png"];
-    this.replay_button.x = Math.round(game.width / 2 - this.replay_button.width / 2);
-    this.replay_button.y = this.scoreboard.y + 175 + 30;
     this.replay_button.opacity = 0;
     this.addChild(this.replay_button);
   },
   show: function() {
     var animation_frame = 0.7 * this.game.fps;
     var animation_easing = enchant.Easing.EXPO_EASEOUT;
+    this.scoreboard.y += 30;
     this.scoreboard.tl.fadeIn(animation_frame, animation_easing);
     this.scoreboard.tl.and();
-    this.scoreboard.tl.moveTo(this.scoreboard.x, Math.round((this.game.height - config.ground_height) / 2 - this.scoreboard.height / 2) + 40, animation_frame, animation_easing);
-    console.log(this.scoreboard);
+    this.scoreboard.tl.moveTo(this.scoreboard.x, this.scoreboard.y - 30, animation_frame, animation_easing);
+    this.replay_button.y += 30;
     this.replay_button.tl.delay(0.5 * this.game.fps).fadeIn(animation_frame, animation_easing);
     this.replay_button.tl.and();
-    this.replay_button.tl.moveTo(this.replay_button.x, this.scoreboard.y + 175, animation_frame, animation_easing);
+    this.replay_button.tl.moveTo(this.replay_button.x, this.replay_button.y - 30, animation_frame, animation_easing);
     this.replay_button.addEventListener("touchstart", function() {
       this.parentNode.onreplay();
     });
   },
+  hide: function() {
+    var animation_frame = 1.0 * this.game.fps;
+    var animation_easing = enchant.Easing.CUBIC_EASEOUT;
+    this.scoreboard.tl.fadeOut(animation_frame, animation_easing);
+    this.scoreboard.tl.and();
+    this.scoreboard.tl.moveTo(this.scoreboard.x, this.scoreboard.y - 30, animation_frame, animation_easing);
+    this.replay_button.tl.fadeOut(animation_frame, animation_easing);
+    this.replay_button.tl.and();
+    return this.replay_button.tl.moveTo(this.replay_button.x, this.replay_button.y - 30, animation_frame, animation_easing);
+  },
   onreplay: function() {}
+});
+
+var NumberDisplay = Class.create(Group, {
+  initialize: function(game, number_assets, width, height, margin) {
+    this.game = game;
+    this.number_assets = number_assets;
+    this.s_width = width;
+    this.s_height = height;
+    this.x_center = Math.round(this.s_width / 2);
+    this.margin = margin;
+    Group.call(this);
+    this.value = 0;
+  },
+  onenterframe: function() {
+    var diff = this.childNodes.length - this.value.toString(10).length;
+    // puts(diff);
+    if(diff > 0) {
+      console.log(diff);
+      for(var i = 0; i <= diff - 1; i++) {
+        this.removeChild(this.childNodes[this.value.toString(10).length + i]);
+      }
+    } else if(diff < 0) {
+      console.log(diff);
+      for(var j = 0; j <= -diff - 1; j++) {
+        var s = new NumberSprite(this.game, this.number_assets, this.s_width, this.s_height);
+        // console.log(s);
+        this.addChild(s);
+      }
+    }
+    if(diff !== 0) {
+      this.childNodes.forEach(function(s, i) {
+        s.x = (s.width + this.margin) * (this.childNodes.length - i - 1);
+      }, this);
+      this.width = this.childNodes.length * this.s_width + (this.childNodes.length - 1) * this.margin;
+      this.x = this.x_center - Math.round(this.width / 2);
+    }
+    this.value.toString(10).split("").map(function(v) { return parseInt(v, 10); }).reverse().forEach(function(v, i) {
+      this.childNodes[i].value = v;
+    }, this);
+    this.childNodes.forEach(function(s, i) {
+      s.opacity = this.opacity;
+    }, this);
+  }//,
+  // fadeIn: function(frame, easing) {
+  //   this.childNodes.forEach(function(s, i) {
+  //     s.tl.fadeIn(frame, easing);
+  //   }, this);
+  // },
+  // fadeOut: function(frame, easing) {
+  //   this.childNodes.forEach(function(s, i) {
+  //     s.tl.fadeOut(frame, easing);
+  //   }, this);
+  // }
+});
+
+var NumberSprite = Class.create(Sprite, {
+  initialize: function(game, number_assets, width, height) {
+    this.game = game;
+    Sprite.call(this, width, height);
+    if(number_assets.length != 10) throw new Error("not all number assets are received");
+    this.number_assets = number_assets;
+    this.value = 0;
+    this.y = 0;
+  },
+  onenterframe: function() {
+    if(this.value >= 0 && this.value <= 9) {
+      this.image = this.game.assets[this.number_assets[this.value]];
+    } else {
+      throw new Error("value is not in the range(0..9)");
+    }
+  }
 });
 
 var DebugWindow = Class.create(Group, {
@@ -202,14 +318,35 @@ var DebugWindow = Class.create(Group, {
     this.height = this.game.height;
     this.line = {};
     this.line_height = 3;
+    this.add("title", "Debug Mode");
   },
-  add: function(name) {
-    this.line[name] = new Label();
-    this.line[name].font = "10px";
+  add: function(name, templete) {
+    this.line[name] = new DebugLabel(templete);
     this.line[name].y = this.line_height;
     this.line[name].x = 3;
     this.line_height += 13;
     this.addChild(this.line[name]);
+  }
+});
+
+var DebugLabel = Class.create(Label, {
+  initialize: function(templete) {
+    Label.call(this);
+    this.font = "10px";
+    this.templete = templete;
+    this.values_simbol = (templete.match(/<#[^>]+>/g) || []).map(function(v) { return v.replace(/<#/, "").replace(/>/, ""); });
+    this.values = {};
+    this.values_simbol.forEach(function(v, i) {
+      this.values[v] = undefined;
+    }, this);
+    // console.log(this);
+  },
+  onenterframe: function() {
+    var text = this.templete;
+    this.values_simbol.forEach(function(v, i) {
+      text = text.replace("<#" + v + ">", this.values[v]);
+    }, this);
+    this.text = text;
   }
 });
 
@@ -242,7 +379,7 @@ var PlayerSprite = Class.create(Group, {
     this.addChild(this.img_ray);
     this.onfall = function() {};
     this.fallen = false;
-    // console.log(this);
+    debug.line.entity.values.all += 1;
   },
   onenterframe: function() {
     this.y_velocity += this.y_gravity * (1 / this.game.fps);
@@ -295,9 +432,11 @@ var Flow = Class.create(Group, {
     // }
   },
   add: function(s) {
+    if(!s._onenterframe) s._onenterframe = function() {};
     s.onenterframe = function() {
       if(this.parentNode.x + this.x + this.width < 0) {
-        // console.log(this.parentNode.x, this.x + this.width);
+        debug.line.entity.values.all -= 1;
+        if(this.parentNode instanceof FlowPipe) debug.line.entity.values.pipe -= 1;
         this.appeared = false;
         this.parentNode.ondisappearedobject(this);
         this.parentNode.flow_sprites.splice(this.parentNode.flow_sprites.indexOf(this), 1);
@@ -305,8 +444,7 @@ var Flow = Class.create(Group, {
       } else if(!this.appeared && this.parentNode.x - this.parentNode.game.width + this.x < 0) {
         this.appeared = true;
         this.parentNode.onappearedobject(this);
-      }
-      if(this.appeared && this.parentNode && this.parentNode.collision_to) {
+      } else if(this.appeared && this.parentNode && this.parentNode.collision_to) {
         var child_node = [this];
         if(this.childNodes) {
           child_node = this.childNodes;
@@ -318,10 +456,13 @@ var Flow = Class.create(Group, {
           }
         }, this);
       }
+      this._onenterframe();
     };
     // console.log(s);
     this.flow_sprites.push(s);
     this.addChild(s);
+    debug.line.entity.values.all += 1;
+    if(this instanceof FlowPipe) debug.line.entity.values.pipe += 1;
   },
   // intersect: function(a, b) {
   //   c0 = a._offsetX + a.width > b._offsetX;
@@ -375,36 +516,42 @@ var FlowEndless = Class.create(Flow, {
 });
 
 var FlowPipe = Class.create(Flow, {
-  initialize: function(game, speed, pipe_margin, collision_to) {
+  initialize: function(game, speed, pipe_margin, player) {
     this.game = game;
     Flow.call(this, this.game, speed);
     this.pipe_margin = pipe_margin;
-    this.pipe_down_height = 26;
-    this.pipe_down_width = 52;
-    this.pipe_up_height = 26;
-    this.pipe_up_width = 52;
+    this.pipe_cap_height = 26;
     this.pipe_middle_height = 1;
-    this.pipe_middle_width = 52;
+    this.pipe_width = 52;
     this.y_ground = this.game.height - config.ground_height;
-    this.collision_to = collision_to;
+    this.player = player;
+    this.collision_to = player.collision_ray;
   },
   add_object: function(x, pipe_margin_position) { // pipe_margin_position : parcentage from top (0.0 , 1.0)
     var s = this.create_sprite(pipe_margin_position);
     s.x = x;
+    s.width = this.pipe_width;
+    s.add_point = false;
+    s._onenterframe = function() {
+      if(!this.add_point && this.parentNode.x + this.x + this.parentNode.pipe_width < this.parentNode.player.x) {
+        this.parentNode.ongetpoint();
+        this.add_point = true;
+      }
+    };
     this.add(s);
   },
   create_sprite: function(pipe_margin_position) {
     // console.log("create pipe");
     var available_pipe_area = this.y_ground;
     var pipe_extra_length = 5;
-    var not_available_pipe_length = this.pipe_down_height + this.pipe_up_height + pipe_extra_length * 2 + this.pipe_margin;
+    var not_available_pipe_length = this.pipe_cap_height * 2 + pipe_extra_length * 2 + this.pipe_margin;
     var available_pipe_length = available_pipe_area - not_available_pipe_length;
     var top_pipe_length = Math.round(not_available_pipe_length / 2) + Math.round(available_pipe_length * pipe_margin_position) - Math.round(this.pipe_margin / 2);
     var bottom_pipe_length = Math.round(not_available_pipe_length / 2) + Math.round(available_pipe_length * (1 - pipe_margin_position)) - Math.round(this.pipe_margin / 2);
-    var top_pipe_middle_sprite = new Sprite(this.pipe_middle_width, top_pipe_length - this.pipe_down_height);
-    var bottom_pipe_middle_sprite = new Sprite(this.pipe_middle_width, bottom_pipe_length - this.pipe_up_height);
-    var top_pipe_down_sprite = new Sprite(this.pipe_down_width, this.pipe_down_height);
-    var bottom_pipe_up_sprite = new Sprite(this.pipe_up_width, this.pipe_up_height);
+    var top_pipe_middle_sprite = new Sprite(this.pipe_width, top_pipe_length - this.pipe_cap_height);
+    var bottom_pipe_middle_sprite = new Sprite(this.pipe_width, bottom_pipe_length - this.pipe_cap_height);
+    var top_pipe_down_sprite = new Sprite(this.pipe_width, this.pipe_cap_height);
+    var bottom_pipe_up_sprite = new Sprite(this.pipe_width, this.pipe_cap_height);
     top_pipe_middle_sprite.image = this.game.assets["pipe-middle.png"];
     bottom_pipe_middle_sprite.image = this.game.assets["pipe-middle.png"];
     top_pipe_down_sprite.image = this.game.assets["pipe-down.png"];
@@ -412,9 +559,9 @@ var FlowPipe = Class.create(Flow, {
     top_pipe_middle_sprite.x = 0;
     top_pipe_middle_sprite.y = 0;
     top_pipe_down_sprite.x = 0;
-    top_pipe_down_sprite.y = top_pipe_length - this.pipe_down_height;
+    top_pipe_down_sprite.y = top_pipe_length - this.pipe_cap_height;
     bottom_pipe_middle_sprite.x = 0;
-    bottom_pipe_middle_sprite.y = available_pipe_area - bottom_pipe_length + this.pipe_up_height;
+    bottom_pipe_middle_sprite.y = available_pipe_area - bottom_pipe_length + this.pipe_cap_height;
     bottom_pipe_up_sprite.x = 0;
     bottom_pipe_up_sprite.y = available_pipe_area - bottom_pipe_length;
     var s = new Group();
@@ -425,7 +572,8 @@ var FlowPipe = Class.create(Flow, {
     s.x = 0;
     s.y = 0;
     return s;
-  }
+  },
+  ongetpoint: function() {}
 });
 
 var puts_log = [];
@@ -436,3 +584,5 @@ function puts (obj) {
     console.log(obj);
   }
 }
+
+var getClassOf = Function.prototype.call.bind(Object.prototype.toString);
