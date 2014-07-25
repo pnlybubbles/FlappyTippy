@@ -47,7 +47,7 @@ if(location.hash.match("#fps")) config.game_fps = parseInt(location.hash.replace
 window.onload = function() {
   var game = new Game(config.game_width, config.game_height);
   game.fps = config.game_fps;
-  var assets = ["player-1.png", "player-2.png", "background.png", "ground.png", "pipe-middle.png", "pipe-down.png", "pipe-up.png", "splash.png", "ceiling.png", "scoreboard.png", "replay.png", "font_big_0.png", "font_big_1.png", "font_big_2.png", "font_big_3.png", "font_big_4.png", "font_big_5.png", "font_big_6.png", "font_big_7.png", "font_big_8.png", "font_big_9.png", "font_small_0.png", "font_small_1.png", "font_small_2.png", "font_small_3.png", "font_small_4.png", "font_small_5.png", "font_small_6.png", "font_small_7.png", "font_small_8.png", "font_small_9.png"];
+  var assets = ["player-1.png", "player-2.png", "background.png", "ground.png", "pipe-middle.png", "pipe-down.png", "pipe-up.png", "splash.png", "ceiling.png", "scoreboard.png", "replay.png", "font_big_0.png", "font_big_1.png", "font_big_2.png", "font_big_3.png", "font_big_4.png", "font_big_5.png", "font_big_6.png", "font_big_7.png", "font_big_8.png", "font_big_9.png", "font_small_0.png", "font_small_1.png", "font_small_2.png", "font_small_3.png", "font_small_4.png", "font_small_5.png", "font_small_6.png", "font_small_7.png", "font_small_8.png", "font_small_9.png", "medal_bronze.png", "medal_silver.png", "medal_gold.png", "medal_platinum.png"];
   var assets_dir = "./assets/";
   assets.forEach(function(v, i) {
     game.preload(assets_dir + v);
@@ -227,25 +227,29 @@ var ResultWindow = Class.create(Group, {
     this.replay_button.y = 200;
     // score_number
     this.score_number = new NumberDisplay(this.game, ["font_small_0.png", "font_small_1.png", "font_small_2.png", "font_small_3.png", "font_small_4.png", "font_small_5.png", "font_small_6.png", "font_small_7.png", "font_small_8.png", "font_small_9.png"], 12, 14, 2);
-    this.score_number.opacity = 0;
     this.score_number.x_right = 210;
     this.score_number.y = 107;
     // best_score_number
     this.best_score_number = new NumberDisplay(this.game, ["font_small_0.png", "font_small_1.png", "font_small_2.png", "font_small_3.png", "font_small_4.png", "font_small_5.png", "font_small_6.png", "font_small_7.png", "font_small_8.png", "font_small_9.png"], 12, 14, 2);
-    this.best_score_number.opacity = 0;
     this.best_score_number.x_right = 210;
     this.best_score_number.y = 148;
+    // medal
+    this.medal = new Sprite(44, 44);
+    this.medal.x = 32;
+    this.medal.y = 114;
     // add to group
     this.addChild(this.scoreboard);
     this.addChild(this.replay_button);
     this.addChild(this.score_number);
     this.addChild(this.best_score_number);
+    this.addChild(this.medal);
     this.score = 0;
     this.best_score = 0;
   },
   set_hide: function() {
     this.opacity = 0;
     this.replay_button.opacity = 0;
+    this.medal.opacity = 0;
     this.onenterframe();
   },
   show: function() {
@@ -262,6 +266,26 @@ var ResultWindow = Class.create(Group, {
     this.replay_button.tl.delay(0.5 * this.game.fps).fadeIn(animation_frame, animation_easing);
     this.replay_button.tl.and();
     this.replay_button.tl.moveTo(this.replay_button.x, this.replay_button.y - 30, animation_frame, animation_easing).then(function() {
+      var image = null;
+      if(this.parentNode.score >= 100) {
+        image = this.parentNode.game.assets["medal_platinum.png"]
+      } else if(this.parentNode.score >= 50) {
+        image = this.parentNode.game.assets["medal_gold.png"];
+      } else if(this.parentNode.score >= 20) {
+        image = this.parentNode.game.assets["medal_silver.png"];
+      } else if(this.parentNode.score >= 10) {
+        image = this.parentNode.game.assets["medal_bronze.png"];
+      }
+      if(image) {
+        // console.log(image);
+        var medal_animation_frame = 0.6 * this.parentNode.game.fps;
+        var medal_animation_easing = enchant.Easing.CUBIC_EASEIN;
+        this.parentNode.medal.image = image;
+        this.parentNode.medal.scale(2, 2);
+        this.parentNode.medal.tl.fadeIn(medal_animation_frame, medal_animation_easing);
+        this.parentNode.medal.tl.and();
+        this.parentNode.medal.tl.scaleTo(1, 1, medal_animation_frame, medal_animation_easing);
+      }
       this.addEventListener("touchstart", function() {
         this.parentNode.onreplay();
       });
@@ -273,6 +297,7 @@ var ResultWindow = Class.create(Group, {
     this.tl.fadeOut(animation_frame, animation_easing);
     this.tl.and();
     this.tl.moveTo(this.x, this.y - 30, animation_frame, animation_easing);
+    this.medal.tl.fadeOut(animation_frame, animation_easing);
     return this.replay_button.tl.fadeOut(animation_frame, animation_easing);
   },
   onenterframe: function() {
