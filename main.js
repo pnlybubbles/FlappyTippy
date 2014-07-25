@@ -9,9 +9,9 @@ var config = {
   "game_width" : 500,
   "game_height" : 450,
   // ゲームのfps上限
-  "game_fps" : 100,
+  "game_fps" : 30,
   //プレイヤーの画像を変更するインターバル(ms)
-  "player_imgs_change_interval" : 230,
+  "player_imgs_change_interval" : 140,
   // プレイヤーの位置(x座標)
   "player_x" : 70,
   // プレイヤーの初期位置(y座標)
@@ -37,7 +37,7 @@ var config = {
   // パイプ同士の距離(左右)
   "pipe_interval" : 185,
   // パイプ同士の距離(上下)
-  "pipe_margin" : 140, //90
+  "pipe_margin" : 90, //90
   // 最初のパイプの位置(ゲーム画面幅 + 指定したx座標)
   "first_pipe_x" : 300
 };
@@ -47,9 +47,17 @@ if(location.hash.match("#fps")) config.game_fps = parseInt(location.hash.replace
 window.onload = function() {
   var game = new Game(config.game_width, config.game_height);
   game.fps = config.game_fps;
-  game.preload("player-1.png", "player-2.png", "background.png", "ground.png", "pipe-middle.png", "pipe-down.png", "pipe-up.png", "splash.png", "ceiling.png", "scoreboard.png", "replay.png", "font_big_0.png", "font_big_1.png", "font_big_2.png", "font_big_3.png", "font_big_4.png", "font_big_5.png", "font_big_6.png", "font_big_7.png", "font_big_8.png", "font_big_9.png");
+  var assets = ["player-1.png", "player-2.png", "background.png", "ground.png", "pipe-middle.png", "pipe-down.png", "pipe-up.png", "splash.png", "ceiling.png", "scoreboard.png", "replay.png", "font_big_0.png", "font_big_1.png", "font_big_2.png", "font_big_3.png", "font_big_4.png", "font_big_5.png", "font_big_6.png", "font_big_7.png", "font_big_8.png", "font_big_9.png", "font_small_0.png", "font_small_1.png", "font_small_2.png", "font_small_3.png", "font_small_4.png", "font_small_5.png", "font_small_6.png", "font_small_7.png", "font_small_8.png", "font_small_9.png"];
+  var assets_dir = "./assets/";
+  assets.forEach(function(v, i) {
+    game.preload(assets_dir + v);
+  });
+  game.best_score = parseInt(loadData().best_score, 10) || 0;
   console.log(game);
   game.onload = function() {
+    assets.forEach(function(v, i) {
+      game.assets[v] = game.assets[assets_dir + v];
+    });
     gameFlow(game);
   };
   game.start();
@@ -69,8 +77,9 @@ function gameFlow (game) {
   debug.add("entity", "entity all: <#all> pipe: <#pipe>");
   debug.line.entity.values.all = 0;
   debug.line.entity.values.pipe = 0;
-  debug.add("point", "point: <#point>");
-  debug.line.point.values.point = 0;
+  debug.add("score", "score: <#score> best: <#best>");
+  debug.line.score.values.score = 0;
+  debug.line.score.values.best = game.best_score;
   stage_scene.addEventListener("touchstart", function() {
     game_start();
   });
@@ -95,11 +104,11 @@ function gameFlow (game) {
   var pipe_object = new FlowPipe(game, config.ground_scroll_speed, config.pipe_margin, player);
   var ground = new FlowEndless(game, config.ground_scroll_speed, "ground.png", ground_image_width, ground_image_height, game.height - ground_image_height);
   var ceiling = new FlowEndless(game, config.ground_scroll_speed, "ceiling.png", 640, 16, 0, player.collision_ray);
-  var point_number = new NumberDisplay(game, ["font_big_0.png", "font_big_1.png", "font_big_2.png", "font_big_3.png", "font_big_4.png", "font_big_5.png", "font_big_6.png", "font_big_7.png", "font_big_8.png", "font_big_9.png"], 24, 36, 5);
-  point_number.x_center = Math.round(game.width / 2);
-  point_number.y = 40;
-  point_number.opacity = 0;
-  console.log(point_number);
+  var score_number = new NumberDisplay(game, ["font_big_0.png", "font_big_1.png", "font_big_2.png", "font_big_3.png", "font_big_4.png", "font_big_5.png", "font_big_6.png", "font_big_7.png", "font_big_8.png", "font_big_9.png"], 24, 36, 5);
+  score_number.x_center = Math.round(game.width / 2);
+  score_number.y = 50;
+  score_number.opacity = 0;
+  // console.log(score_number);
   // start
   var start = new Group();
   start_splash = new Sprite(188, 170);
@@ -110,10 +119,9 @@ function gameFlow (game) {
   start_splash.tl.fadeIn(0.6 * game.fps, enchant.Easing.LINEAR);
   // result
   var result = new ResultWindow(game);
-  result.scoreboard.x = Math.round(game.width / 2 - result.scoreboard.width / 2);
-  result.scoreboard.y = Math.round((game.height - config.ground_height) / 2 - result.scoreboard.height / 2) + 45;
-  result.replay_button.x = Math.round(game.width / 2 - result.replay_button.width / 2);
-  result.replay_button.y = result.scoreboard.y + 200;
+  result.x = Math.round(game.width / 2 - result.scoreboard.width / 2);
+  result.y = Math.round((game.height - config.ground_height) / 2 - result.scoreboard.height / 2) + 45;
+  result.set_hide();
   // add to group
   // stage
   stage.addChild(background);
@@ -121,7 +129,7 @@ function gameFlow (game) {
   stage.addChild(pipe_object);
   stage.addChild(ground);
   stage.addChild(ceiling);
-  stage.addChild(point_number);
+  stage.addChild(score_number);
   //start
   start.addChild(start_splash);
   // add to scene
@@ -139,9 +147,15 @@ function gameFlow (game) {
       player.y_velocity = 0;
       player.imgs_animation = false;
       stop_scrolling();
-      point_number.tl.fadeOut(0.1 * game.fps, enchant.Easing.LINEAR).then(function() {
+      score_number.tl.fadeOut(0.1 * game.fps, enchant.Easing.LINEAR).then(function() {
         stage.removeChild(this);
       });
+      if(score_number.value > game.best_score) {
+        game.best_score = score_number.value;
+      }
+      saveData("best_score", game.best_score);
+      debug.line.score.values.best = game.best_score;
+      result.best_score = game.best_score;
       result.show();
       result.onreplay = function() {
         // console.log("replay");
@@ -158,7 +172,7 @@ function gameFlow (game) {
       start_splash.tl.fadeOut(0.2 * game.fps, enchant.Easing.LINEAR).then(function() {
         stage_scene.removeChild(start);
       });
-      point_number.tl.fadeIn(0.1 * game.fps, enchant.Easing.LINEAR);
+      score_number.tl.fadeIn(0.1 * game.fps, enchant.Easing.LINEAR);
       player.y_gravity = config.player_y_gravity;
       pipe_object.add_object(-(pipe_object.x) + game.width + config.first_pipe_x, 0.3);
       game_started = true;
@@ -183,12 +197,13 @@ function gameFlow (game) {
     // console.log(x, pipe_margin_position);
     this.add_object(x, pipe_margin_position);
   };
-  var point = 0;
-  pipe_object.ongetpoint = function() {
-    console.log("get point");
-    point += 1;
-    point_number.value = point;
-    debug.line.point.values.point = point;
+  var score = 0;
+  pipe_object.ongetscore = function() {
+    // console.log("get score");
+    score += 1;
+    score_number.value = score;
+    result.score = score;
+    debug.line.score.values.score = score;
   };
   pipe_object.onintersectobject = function() {
     game_stop();
@@ -202,39 +217,68 @@ var ResultWindow = Class.create(Group, {
   initialize: function(game) {
     this.game = game;
     Group.call(this);
+    // scoreboard
     this.scoreboard = new Sprite(236, 280);
     this.scoreboard.image = this.game.assets["scoreboard.png"];
-    this.scoreboard.opacity = 0;
-    this.addChild(this.scoreboard);
+    // replay_button
     this.replay_button = new Sprite(114, 70);
     this.replay_button.image = this.game.assets["replay.png"];
-    this.replay_button.opacity = 0;
+    this.replay_button.x = Math.round(this.scoreboard.width / 2 - this.replay_button.width / 2);
+    this.replay_button.y = 200;
+    // score_number
+    this.score_number = new NumberDisplay(this.game, ["font_small_0.png", "font_small_1.png", "font_small_2.png", "font_small_3.png", "font_small_4.png", "font_small_5.png", "font_small_6.png", "font_small_7.png", "font_small_8.png", "font_small_9.png"], 12, 14, 2);
+    this.score_number.opacity = 0;
+    this.score_number.x_right = 210;
+    this.score_number.y = 107;
+    // best_score_number
+    this.best_score_number = new NumberDisplay(this.game, ["font_small_0.png", "font_small_1.png", "font_small_2.png", "font_small_3.png", "font_small_4.png", "font_small_5.png", "font_small_6.png", "font_small_7.png", "font_small_8.png", "font_small_9.png"], 12, 14, 2);
+    this.best_score_number.opacity = 0;
+    this.best_score_number.x_right = 210;
+    this.best_score_number.y = 148;
+    // add to group
+    this.addChild(this.scoreboard);
     this.addChild(this.replay_button);
+    this.addChild(this.score_number);
+    this.addChild(this.best_score_number);
+    this.score = 0;
+    this.best_score = 0;
+  },
+  set_hide: function() {
+    this.opacity = 0;
+    this.replay_button.opacity = 0;
+    this.onenterframe();
   },
   show: function() {
     var animation_frame = 0.7 * this.game.fps;
     var animation_easing = enchant.Easing.EXPO_EASEOUT;
-    this.scoreboard.y += 30;
-    this.scoreboard.tl.fadeIn(animation_frame, animation_easing);
-    this.scoreboard.tl.and();
-    this.scoreboard.tl.moveTo(this.scoreboard.x, this.scoreboard.y - 30, animation_frame, animation_easing);
+    this.score_number.value = this.score;
+    this.best_score_number.value = this.best_score;
+    // console.log(this.score_number.value);
+    this.y += 30;
+    this.tl.fadeIn(animation_frame, animation_easing);
+    this.tl.and();
+    this.tl.moveTo(this.x, this.y - 30, animation_frame, animation_easing);
     this.replay_button.y += 30;
     this.replay_button.tl.delay(0.5 * this.game.fps).fadeIn(animation_frame, animation_easing);
     this.replay_button.tl.and();
-    this.replay_button.tl.moveTo(this.replay_button.x, this.replay_button.y - 30, animation_frame, animation_easing);
-    this.replay_button.addEventListener("touchstart", function() {
-      this.parentNode.onreplay();
+    this.replay_button.tl.moveTo(this.replay_button.x, this.replay_button.y - 30, animation_frame, animation_easing).then(function() {
+      this.addEventListener("touchstart", function() {
+        this.parentNode.onreplay();
+      });
     });
   },
   hide: function() {
     var animation_frame = 1.0 * this.game.fps;
     var animation_easing = enchant.Easing.CUBIC_EASEOUT;
-    this.scoreboard.tl.fadeOut(animation_frame, animation_easing);
-    this.scoreboard.tl.and();
-    this.scoreboard.tl.moveTo(this.scoreboard.x, this.scoreboard.y - 30, animation_frame, animation_easing);
-    this.replay_button.tl.fadeOut(animation_frame, animation_easing);
-    this.replay_button.tl.and();
-    return this.replay_button.tl.moveTo(this.replay_button.x, this.replay_button.y - 30, animation_frame, animation_easing);
+    this.tl.fadeOut(animation_frame, animation_easing);
+    this.tl.and();
+    this.tl.moveTo(this.x, this.y - 30, animation_frame, animation_easing);
+    return this.replay_button.tl.fadeOut(animation_frame, animation_easing);
+  },
+  onenterframe: function() {
+    this.scoreboard.opacity = this.opacity;
+    this.score_number.opacity = this.opacity;
+    this.best_score_number.opacity = this.opacity;
   },
   onreplay: function() {}
 });
@@ -245,7 +289,9 @@ var NumberDisplay = Class.create(Group, {
     this.number_assets = number_assets;
     this.s_width = width;
     this.s_height = height;
-    this.x_center = Math.round(this.s_width / 2);
+    this.x_center = null;
+    this.x_left = null;
+    this.x_right = null;
     this.margin = margin;
     Group.call(this);
     this.value = 0;
@@ -254,12 +300,12 @@ var NumberDisplay = Class.create(Group, {
     var diff = this.childNodes.length - this.value.toString(10).length;
     // puts(diff);
     if(diff > 0) {
-      console.log(diff);
+      // console.log(diff);
       for(var i = 0; i <= diff - 1; i++) {
         this.removeChild(this.childNodes[this.value.toString(10).length + i]);
       }
     } else if(diff < 0) {
-      console.log(diff);
+      // console.log(diff);
       for(var j = 0; j <= -diff - 1; j++) {
         var s = new NumberSprite(this.game, this.number_assets, this.s_width, this.s_height);
         // console.log(s);
@@ -271,7 +317,13 @@ var NumberDisplay = Class.create(Group, {
         s.x = (s.width + this.margin) * (this.childNodes.length - i - 1);
       }, this);
       this.width = this.childNodes.length * this.s_width + (this.childNodes.length - 1) * this.margin;
-      this.x = this.x_center - Math.round(this.width / 2);
+      if(this.x_center) {
+        this.x = this.x_center - Math.round(this.width / 2);
+      } else if(this.x_right) {
+        this.x = this.x_right - this.width;
+      } else if(this.x_left) {
+        this.x = this.x_left;
+      }
     }
     this.value.toString(10).split("").map(function(v) { return parseInt(v, 10); }).reverse().forEach(function(v, i) {
       this.childNodes[i].value = v;
@@ -531,11 +583,11 @@ var FlowPipe = Class.create(Flow, {
     var s = this.create_sprite(pipe_margin_position);
     s.x = x;
     s.width = this.pipe_width;
-    s.add_point = false;
+    s.add_score = false;
     s._onenterframe = function() {
-      if(!this.add_point && this.parentNode.x + this.x + this.parentNode.pipe_width < this.parentNode.player.x) {
-        this.parentNode.ongetpoint();
-        this.add_point = true;
+      if(!this.add_score && this.parentNode.x + this.x + this.parentNode.pipe_width < this.parentNode.player.x) {
+        this.parentNode.ongetscore();
+        this.add_score = true;
       }
     };
     this.add(s);
@@ -573,7 +625,7 @@ var FlowPipe = Class.create(Flow, {
     s.y = 0;
     return s;
   },
-  ongetpoint: function() {}
+  ongetscore: function() {}
 });
 
 var puts_log = [];
@@ -583,6 +635,21 @@ function puts (obj) {
     puts_log.push(obj);
     console.log(obj);
   }
+}
+
+function saveData (name, value) {
+  var expire_date = new Date();
+  expire_date.setTime(expire_date.getTime() + 365*24*60*60*1000);
+  document.cookie = encodeURIComponent(name) + "=" + encodeURIComponent(value) + "; expires=" + expire_date.toGMTString();
+}
+
+function loadData () {
+  var data = {};
+  document.cookie.split(";").forEach(function(v, i) {
+    var match = v.match(/(.+)=(.+)/);
+    if(match) data[match[1]] = match[2];
+  });
+  return data;
 }
 
 var getClassOf = Function.prototype.call.bind(Object.prototype.toString);
