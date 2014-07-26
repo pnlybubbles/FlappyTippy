@@ -2,7 +2,7 @@ enchant();
 
 // var DEBUG = true;
 var DEBUG = false;
-if(location.hash == "#debug") DEBUG = true;
+if(location.hash.match("#debug")) DEBUG = true;
 
 var config = {
   // ゲーム画面のサイズ
@@ -42,7 +42,9 @@ var config = {
   "first_pipe_x" : 300
 };
 
-if(location.hash.match("#fps")) config.game_fps = parseInt(location.hash.replace(/#fps/, ""), 10);
+if(location.hash.match("#fps")) config.game_fps = parseInt(location.hash.match(/#fps([0-9]+)/)[1], 10);
+
+console.log(location.hash);
 
 window.onload = function() {
   var game = new Game(config.game_width, config.game_height);
@@ -55,6 +57,7 @@ window.onload = function() {
   game.best_score = parseInt(loadData().best_score, 10) || 0;
   console.log(game);
   game.onload = function() {
+    game.keybind(32, 'space');
     assets.forEach(function(v, i) {
       game.assets[v] = game.assets[assets_dir + v];
     });
@@ -80,12 +83,14 @@ function gameFlow (game) {
   debug.add("score", "score: <#score> best: <#best>");
   debug.line.score.values.score = 0;
   debug.line.score.values.best = game.best_score;
+  debug.add("fps", "fps: <#fps>");
+  var fps_log = [];
+  // addEventListener
   stage_scene.addEventListener("touchstart", function() {
     game_start();
   });
-  debug.add("fps", "fps: <#fps>");
-  var fps_log = [];
   stage_scene.addEventListener("enterframe", function() {
+    if(game.input.space) game_start();
     fps_log.push(game.actualFps);
     if(game.frame % game.fps === 0) {
       var fps_sum = 0;
